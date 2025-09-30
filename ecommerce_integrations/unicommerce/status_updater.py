@@ -58,7 +58,7 @@ def update_sales_order_status():
 	updated_orders = client.search_sales_order(updated_since=minutes)
 
 	enabled_channels = frappe.db.get_list("Unicommerce Channel", filters={"enabled": 1}, pluck="channel_id")
-	valid_orders = [order for order in updated_orders if order.get("channel") in enabled_channels]
+	valid_orders = [order for order in updated_orders if order.get("unicommerce_channel_id") in enabled_channels]
 	if valid_orders:
 		_update_order_status_fields(valid_orders)
 
