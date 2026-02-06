@@ -85,30 +85,55 @@ class UnicommerceSettings(SettingController):
 			frappe.db.commit()
 			self.load_from_db()
 
-	def update_tokens(self, grant_type="password"):
-		url = f"https://{self.unicommerce_site}/oauth/token"
+def update_tokens(self, grant_type="password"):
+	url = f"https://{self.unicommerce_site}/oauth/token"
 
-		params = {"grant_type": grant_type, "client_id": self.client_id}
-		if grant_type == "password":
-			params.update({"username": self.username, "password": self.get_password("password")})
-		elif grant_type == "refresh_token":
-			params.update({"refresh_token": self.get_password("refresh_token")})
+	payload = {
+		"grant_type": grant_type,
+		"client_id": self.client_id,
+	}
 
-		res = requests.get(url, params=params)
-		if res.status_code == 200:
-			res = res.json()
-			self.access_token = res["access_token"]
-			self.refresh_token = res["refresh_token"]
-			self.token_type = res["token_type"]
-			self.expires_on = add_to_date(now_datetime(), seconds=int(res["expires_in"]))
+	if grant_type == "password":
+		payload.update(
+			{
+				"username": self.username,
+				"password": self.get_password("password"),
+			}
+		)
+	elif grant_type == "refresh_token":
+		payload.update(
+			{
+				"refresh_token": self.get_password("refresh_token"),
+			}
+		)
+
+	headers = {
+		"Content-Type": "application/x-www-form-urlencoded",
+		"Accept": "application/json",
+	}
+
+	res = requests.post(url, data=payload, headers=headers, timeout=20)
+
+	if res.status_code == 200:
+		data = res.json()
+		self.access_token = data["access_token"]
+		self.refresh_token = data["refresh_token"]
+		self.token_type = data["token_type"]
+		self.expires_on = add_to_date(now_datetime(), seconds=int(data["expires_in"]))
+	else:
+		try:
+			data = res.json()
+			error = data.get("error")
+			description = data.get("error_description")
+		except Exception:
+			error = res.status_code
+			description = res.text
+
+		if error and "invalid_grant" in str(error):
+			self._handle_refresh_token_expiry(grant_type=grant_type)
 		else:
-			# Invalid refresh token
-			res = res.json()
-			error, description = res.get("error"), res.get("error_description")
-			if error and "invalid_grant" in error:
-				self._handle_refresh_token_expiry(grant_type=grant_type)
-			else:
-				frappe.throw(_("Unicommerce reported error: <br>{}: {}").format(error, description))
+			frappe.throw(_("Unicommerce reported error: <br>{}: {}").format(error, description))
+
 
 	def _handle_refresh_token_expiry(self, grant_type: str):
 		"""Handle expired refresh token. Refresh tokens expire every 30 days.
