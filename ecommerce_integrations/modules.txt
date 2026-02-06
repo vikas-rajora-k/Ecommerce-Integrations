@@ -1,5 +1,4 @@
 Ecommerce Integrations
-shopify
 Zenoti
 unicommerce
 Amazon
